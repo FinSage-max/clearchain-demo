@@ -412,6 +412,15 @@ export class FraudTrailEngine {
     let outcome: LienOutcomeStatus = holdAmt < requested ? 'PARTIAL_LIEN' : 'LIEN_ACTIVE';
     let note = `Proportionate lien ₹${holdAmt} on ${acct.label} (requested ₹${requested}, available ₹${lienable}). Rest of account stays usable.`;
 
+    const potShared =
+      competing.length > 0 ||
+      [...this.cases.values()].some(
+        (x) =>
+          x.id !== c.id &&
+          x.entryAccountRef === acct.accountRef &&
+          x.status !== 'CLOSED',
+      );
+
     if (competing.length > 0) {
       const unpaidClaimants = [c, ...competing];
       const totalClaim = unpaidClaimants.reduce((s, x) => s + x.amountLost, 0);
@@ -419,6 +428,12 @@ export class FraudTrailEngine {
       holdAmt = Math.min(holdAmt, lienable, requested);
       outcome = 'PRO_RATA_LIEN';
       note = `Pro-rata lien ₹${holdAmt} for ${c.victimName} from pot ₹${lienable} across ${unpaidClaimants.length} victims (total claims ₹${totalClaim}). This is why one mule freeze rarely makes every victim whole.`;
+      this.recoveryExplainer =
+        'Even when money is frozen, many victims often share one small pot. Courts/banks split what’s left. Partial recovery is common; full restore is rare — another driver of the ~2% figure.';
+    } else if (potShared) {
+      holdAmt = Math.min(requested, lienable);
+      outcome = 'PRO_RATA_LIEN';
+      note = `Pro-rata remainder ₹${holdAmt} for ${c.victimName} from leftover pot ₹${lienable} after other victims’ liens. Nobody is made fully whole.`;
       this.recoveryExplainer =
         'Even when money is frozen, many victims often share one small pot. Courts/banks split what’s left. Partial recovery is common; full restore is rare — another driver of the ~2% figure.';
     }

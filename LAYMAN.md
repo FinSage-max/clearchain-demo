@@ -6,46 +6,72 @@ When you pay with UPI, the “payment successful” screen is fast. What happens
 
 1. If a bank’s systems are struggling, payments can still be pushed into them — customers get stuck in “was I charged or not?”
 2. A shopkeeper (like Raju) often waits 1–2 days for the Payment Aggregator to settle money that already landed in escrow.
-3. If something goes wrong, banks sometimes freeze a whole account instead of just the disputed amount.
+3. Fraud money moves in minutes across mule accounts, ATMs, or even a real shop — while the complaint and lien arrive later. Nationally only about **~2%** of lost funds are restored to victims. That is not mainly “banks forgot to try.”
 
-Rules for all of this already exist (RBI turnaround times, escrow rules, court rulings). What’s missing is a **shared place where the right parties agree on the state of one payment** and act together.
+Rules already exist (RBI turnaround times, PA escrow, court rulings against whole-account freezes, CFCFRMS for cyber-fraud liens). What’s missing is a **shared place where the right parties agree on the state of one payment / one fraud trail** and act together.
 
 ## What ClearChain is
 
-Think of ClearChain as a **shared notebook** that payment companies and banks can trust:
+A **shared notebook** keyed by payment RRN and fraud case:
 
-- Every payment has an ID called an **RRN** (like a tracking number).
-- The notebook records: bank healthy or not? escrow money confirmed? shopkeeper paid from a float? reversed because it got stuck? cascade to suppliers? hold only the disputed rupees?
+- Bank healthy or not?
+- Escrow confirmed → float advance to merchant?
+- Stuck past deadline → reverse?
+- Supply cascade with consent?
+- Fraud: where did the ₹100 go, and what outcome is allowed?
 
-Nobody can rewrite history quietly. Tonight that notebook runs on your laptop. Tomorrow the same rules can sit on **Drunix** (Hyperledger Fabric), where multiple organisations must *endorse* (digitally sign) the right actions.
+Tonight it runs in memory on your laptop. Tomorrow the same rules can sit on **Drunix** (Fabric), with multi-party endorsement.
 
-## What we built tonight
+## What we built
 
-| Piece | What it does in human terms |
+| Piece | Human meaning |
 | --- | --- |
-| **Health flag** | Label a bank Healthy / Degraded. If Degraded, the demo **stops the payment before any debit** — fail fast, no mystery. |
-| **Escrow-confirmed advance** | Once escrow credit is confirmed, pay Raju **immediately** from a pre-funded float (not magic money — it’s an advance against money already in escrow). |
-| **RRN lock** | Same tracking number twice → second attempt **rejected**. No double payout. |
-| **TAT watcher** | If a payment sits ambiguous past the demo deadline, an automatic **reversal record** is written (inspired by RBI’s ₹100/day / T+1 style rules). |
-| **Cascade / fair hold (extra)** | Split a payment down the supply chain with consent, or hold only the disputed amount with a case reference. |
+| **Health flag** | Degraded bank → **fail before debit** |
+| **Escrow-confirmed advance** | After escrow OK, pay Raju from float now |
+| **RRN lock** | Same ID twice → reject (no double pay) |
+| **TAT watcher** | Stuck past deadline → auto-reversal record |
+| **Cascade** | Tier-1 consents → split to Tier-2 |
+| **Fraud trail (full)** | Hop graph + policy outcomes below |
 
-## Why this is useful (not just a tech demo)
+## Fraud trail — the important part (why ~2%)
 
-- **Raju** gets working capital the same day he earned it.
-- **Customers** are less likely to be stuck wondering if they were charged when a bank is sick.
-- **Banks / aggregators** get one RRN timeline they can reconcile instead of chasing settlement files by hand.
-- **Judges / tomorrow-you**: the “genius” bit is not “blockchain.” It’s **matching each action to who is accountable** (switch + network for health; aggregator + sponsor bank for payout; bank + investigator for a hold).
+**CFCFRMS / 1930 already** alerts banks to mark liens. We do **not** replace that.
 
-## What we did *not* claim tonight
+**We add** a shared trail with honest outcomes:
 
-- We did not replace NPCI UPI, TReDS, or the government’s cyber-fraud portal.
-- We did not put the UPI hot path on a blockchain (routing uses a simple flag check).
-- Fabric multi-org endorsement on a live Drunix network is the **tomorrow** plug-in; tonight proves the product logic end-to-end.
+| Scenario (in the UI) | What happens | Outcome code |
+| --- | --- | --- |
+| ₹100 still in mule when case lands | Hold only ₹100; rest of account usable | `LIEN_ACTIVE` |
+| Fraudster ATM-withdraws before freeze | Cannot invent cash back; record evidence; block future credits on Layer-1 | `OUTFLOWED` + `PREVENT_FURTHER_CREDIT` |
+| Money hops Layer-1 → Layer-2 | Empty L1 → follow to L2 and lien there if funds remain | `HOP_FOLLOW` then lien |
+| Fraudster pays **Raju for a real repair** | Trace the hop; **do not** auto-hold the shopkeeper | `GOOD_FAITH_EXIT` |
+| Investigator marks shop as fake/mule | Then proportionate hold on merchant is allowed | `LIEN_ACTIVE` (after suspect flag) |
+| Two victims, only ₹150 left in pot | Split what’s left | `PRO_RATA_LIEN` |
+| Someone tries to freeze whole salary a/c | Rejected | `REJECTED_WHOLE_ACCOUNT` |
 
-## How to click through before sleep
+**Lien ≠ refund.** Even a perfect lien still waits on police/court before the victim sees money. That gap alone keeps restore rates tiny.
 
-1. Open the UI → start on **Healthy** bank → run **Pay Raju** → see escrow confirm → instant credit.
-2. Try the **same RRN** again → see reject.
-3. Flip bank to **Degraded** → try pay → fail before debit.
-4. Create a **stuck** payment → wait for watcher (or trigger check) → see reverse.
-5. Read this file once more — that’s the story you tell tomorrow.
+So ClearChain’s fraud story is: **hold what’s still holdable, faster and fairer; say clearly when money is already gone or sitting with an honest shop; never pretend we recovered cash that left the system.**
+
+## Why this is useful
+
+- Raju gets paid the same day (settlement spine).
+- Customers avoid mystery debits when a bank is sick.
+- Banks/PAs get one RRN timeline.
+- Investigators/banks share one hop graph with **policy** (not panic whole freezes).
+- You can explain the ~2% number without hand-waving.
+
+## What we do *not* claim
+
+- Not replacing NPCI UPI, TReDS, or CFCFRMS.
+- Not putting UPI hot-path on a blockchain.
+- Not magically recovering ATM cash or good-faith shop spend.
+- Fabric multi-org live deploy = tomorrow; logic is proven tonight.
+
+## Click-through
+
+1. Pay Raju → instant float → retry same RRN (fail).
+2. Degrade bank → fail before debit.
+3. Stuck payment → watcher reverse.
+4. **Fraud section:** run each scenario; read the amber explainer after each.
+5. Sleep. Tomorrow: Fabric wiring + polish.

@@ -12,6 +12,57 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
+export type FraudTrail = {
+  cases: Array<{
+    id: string;
+    caseRef: string;
+    legalProvision: string;
+    victimName: string;
+    amountLost: number;
+    entryAccountRef: string;
+    entryRrn: string;
+    status: string;
+    note: string;
+    createdAt: string;
+  }>;
+  accounts: Array<{
+    accountRef: string;
+    bankId: string;
+    label: string;
+    role: string;
+    layer: number;
+    availableBalance: number;
+    preventFurtherCredit: boolean;
+    suspectMerchant: boolean;
+  }>;
+  hops: Array<{
+    id: string;
+    caseId: string;
+    fromAccountRef: string | null;
+    toAccountRef: string | null;
+    rrn: string;
+    amount: number;
+    kind: string;
+    merchantGoodFaith: boolean;
+    merchantName?: string;
+    evidenceRef?: string;
+    note: string;
+    at: string;
+  }>;
+  liens: Array<{
+    id: string;
+    caseId: string;
+    accountRef: string;
+    requestedAmount: number;
+    heldAmount: number;
+    outcome: string;
+    caseRef: string;
+    note: string;
+    createdAt: string;
+  }>;
+  recoveryExplainer: string;
+};
+
 export type Snapshot = {
   mode: string;
   banks: Array<{ bankId: string; status: string; updatedAt: string; reason: string }>;
@@ -50,7 +101,8 @@ export type Snapshot = {
     legalProvision: string;
     status: string;
   }>;
-  timeline: Array<{ at: string; kind: string; message: string; rrn?: string }>;
+  fraudTrail: FraudTrail;
+  timeline: Array<{ at: string; kind: string; message: string; rrn?: string; caseId?: string }>;
   demoTatMs: number;
 };
 
@@ -84,4 +136,10 @@ export const api = {
     }),
   createHold: (body: Record<string, unknown>) =>
     req('/api/holds', { method: 'POST', body: JSON.stringify(body) }),
+  fraudReset: () => req('/api/fraud/reset', { method: 'POST', body: '{}' }),
+  fraudScenario: (name: string) =>
+    req<{ scenario: string; fraudTrail: FraudTrail }>(`/api/fraud/scenarios/${name}`, {
+      method: 'POST',
+      body: '{}',
+    }),
 };

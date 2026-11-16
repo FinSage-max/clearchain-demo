@@ -1,3 +1,4 @@
+import { FraudTrailEngine } from './fraudTrail';
 import {
   BankHealth,
   BankStatus,
@@ -19,11 +20,16 @@ export class MemoryStore {
   banks = new Map<string, BankHealth>();
   payments = new Map<string, Payment>();
   obligations = new Map<string, Obligation>();
+  /** Legacy simple holds (also mirrored into trail when possible). */
   holds = new Map<string, FraudHold>();
   floatAcct: FloatAccount;
   timeline: TimelineEvent[] = [];
+  fraud: FraudTrailEngine;
 
   constructor() {
+    this.fraud = new FraudTrailEngine((kind, message, meta) =>
+      this.push(kind, message, meta?.rrn, meta?.caseId),
+    );
     const t = nowIso();
     this.banks.set('BANK_A', {
       bankId: 'BANK_A',
@@ -41,9 +47,9 @@ export class MemoryStore {
     this.push('SYSTEM', 'Ledger seeded: banks HEALTHY, float ₹5,00,000');
   }
 
-  private push(kind: string, message: string, rrn?: string) {
-    this.timeline.unshift({ at: nowIso(), kind, message, rrn });
-    if (this.timeline.length > 200) this.timeline.pop();
+  private push(kind: string, message: string, rrn?: string, caseId?: string) {
+    this.timeline.unshift({ at: nowIso(), kind, message, rrn, caseId });
+    if (this.timeline.length > 300) this.timeline.pop();
   }
 
   setBankHealth(bankId: string, status: BankStatus, reason: string): BankHealth {
@@ -179,7 +185,6 @@ export class MemoryStore {
     return p;
   }
 
-  /** Scan for STUCK / PENDING past deadline. */
   runWatcher(): Payment[] {
     const now = Date.now();
     const reversed: Payment[] = [];
@@ -215,6 +220,7 @@ export class MemoryStore {
     return o;
   }
 
+  /** Legacy simple hold — still rejects missing case fields. */
   createHold(input: Omit<FraudHold, 'status' | 'createdAt'>): FraudHold {
     if (!input.caseRef?.trim() || !input.legalProvision?.trim()) {
       throw new Error(
@@ -229,7 +235,7 @@ export class MemoryStore {
     this.holds.set(h.id, h);
     this.push(
       'HOLD',
-      `Proportionate hold ₹${h.amount} on ${h.accountRef} (${h.caseRef})`,
+      `Legacy proportionate hold ₹${h.amount} on ${h.accountRef} (${h.caseRef})`,
     );
     return h;
   }
@@ -244,6 +250,7 @@ export class MemoryStore {
       float: this.floatAcct,
       obligations: [...this.obligations.values()],
       holds: [...this.holds.values()],
+      fraudTrail: this.fraud.snapshot(),
       timeline: this.timeline,
       demoTatMs: DEMO_TAT_MS,
     };

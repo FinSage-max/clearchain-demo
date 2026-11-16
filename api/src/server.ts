@@ -233,6 +233,119 @@ app.post('/api/demo/pay-raju', (req, res) => {
   }
 });
 
+/* ---------- Fraud trail (full-power) ---------- */
+
+app.get('/api/fraud/trail', (_req, res) => {
+  if (!requireMemory(_req, res)) return;
+  res.json(store.fraud.snapshot());
+});
+
+app.post('/api/fraud/reset', (_req, res) => {
+  if (!requireMemory(_req, res)) return;
+  store.fraud.reset();
+  res.json({ ok: true, fraudTrail: store.fraud.snapshot() });
+});
+
+app.post('/api/fraud/cases', (req, res) => {
+  if (!requireMemory(req, res)) return;
+  try {
+    res.status(201).json(store.fraud.openCase(req.body));
+  } catch (e) {
+    res.status(400).json({ error: errMsg(e) });
+  }
+});
+
+app.post('/api/fraud/hops', (req, res) => {
+  if (!requireMemory(req, res)) return;
+  try {
+    res.status(201).json(store.fraud.recordHop(req.body));
+  } catch (e) {
+    res.status(400).json({ error: errMsg(e) });
+  }
+});
+
+app.post('/api/fraud/accounts', (req, res) => {
+  if (!requireMemory(req, res)) return;
+  try {
+    res.status(201).json(store.fraud.upsertAccount(req.body));
+  } catch (e) {
+    res.status(400).json({ error: errMsg(e) });
+  }
+});
+
+app.post('/api/fraud/liens', (req, res) => {
+  if (!requireMemory(req, res)) return;
+  try {
+    const { caseId, accountRef, requestedAmount, allowWholeAccount } = req.body;
+    if (!caseId || !accountRef) {
+      res.status(400).json({ error: 'caseId and accountRef required' });
+      return;
+    }
+    res.status(201).json(
+      store.fraud.attemptLien({
+        caseId: String(caseId),
+        accountRef: String(accountRef),
+        requestedAmount:
+          requestedAmount === undefined ? undefined : Number(requestedAmount),
+        allowWholeAccount: Boolean(allowWholeAccount),
+      }),
+    );
+  } catch (e) {
+    res.status(400).json({ error: errMsg(e) });
+  }
+});
+
+app.post('/api/fraud/liens/follow', (req, res) => {
+  if (!requireMemory(req, res)) return;
+  try {
+    res.json(store.fraud.attemptLienFollowHop(String(req.body.caseId)));
+  } catch (e) {
+    res.status(400).json({ error: errMsg(e) });
+  }
+});
+
+app.post('/api/fraud/accounts/:ref/suspect', (req, res) => {
+  if (!requireMemory(req, res)) return;
+  try {
+    res.json(
+      store.fraud.markSuspectMerchant(req.params.ref, Boolean(req.body.suspect)),
+    );
+  } catch (e) {
+    res.status(400).json({ error: errMsg(e) });
+  }
+});
+
+const fraudScenarios: Record<string, () => unknown> = {
+  'funds-still-there': () => store.fraud.scenarioFundsStillThere(),
+  'cashed-out': () => store.fraud.scenarioCashedOutBeforeFreeze(),
+  'hop-layer2': () => store.fraud.scenarioHopLayer2(),
+  'good-faith-shop': () => store.fraud.scenarioGoodFaithShopkeeper(),
+  'suspect-merchant': () => store.fraud.scenarioSuspectMerchantOverride(),
+  'multi-victim': () => store.fraud.scenarioMultiVictimProRata(),
+  'whole-account-rejected': () => store.fraud.scenarioWholeAccountRejected(),
+};
+
+app.post('/api/fraud/scenarios/:name', (req, res) => {
+  if (!requireMemory(req, res)) return;
+  try {
+    const fn = fraudScenarios[req.params.name];
+    if (!fn) {
+      res.status(404).json({
+        error: `Unknown scenario. Try: ${Object.keys(fraudScenarios).join(', ')}`,
+      });
+      return;
+    }
+    const result = fn();
+    res.status(201).json({
+      scenario: req.params.name,
+      result,
+      fraudTrail: store.fraud.snapshot(),
+    });
+  } catch (e) {
+    res.status(400).json({ error: errMsg(e) });
+  }
+});
+
 setInterval(() => {
   try {
     store.runWatcher();

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build/
+.env
+*.log
+.DS_Store
+chaincode/vendor/
+frontend/dist/
+api/dist/
